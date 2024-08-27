@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="ja">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ナンプレ解析結果</title>
+</head>
+
+<body>
+    <h1>ナンプレ解析結果</h1>
+    <input type="file" id="imageUpload" accept="image/*">
+    <pre id="output"></pre>
+    <script src="https://cdn.rawgit.com/naptha/tesseract.js/1.0.10/dist/tesseract.js"></script>
+    <script>
+        document.getElementById('imageUpload').addEventListener('change', handleImageUpload);
+
+        function handleImageUpload(event) {
+            const file = event.target.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = function (e) {
+                    const img = new Image();
+                    img.onload = function () {
+                        processImage(img);
+                    };
+                    img.src = e.target.result;
+                };
+                reader.readAsDataURL(file);
+            }
+        }
+
+        function processImage(image) {
+            const rows = 9;
+            const cols = 9;
+            const startX = 41;
+            const startY = 542;
+            const cellWidth = 111;
+            const cellHeight = 111;
+
+            let promises = [];
+
+            for (let row = 0; row < rows; row++) {
+                for (let col = 0; col < cols; col++) {
+                    let x = startX + col * cellWidth;
+                    let y = startY + row * cellHeight;
+                    promises.push(sliceAndRecognize(image, x, y, cellWidth, cellHeight));
+                }
+            }
+
+            Promise.all(promises).then(results => {
+                let puzzle = [];
+                let emptyCells = [];
+
+                // OCR結果を9x9の配列に格納
+                for (let i = 0; i < results.length; i++) {
+                    let row = Math.floor(i / cols);
+                    let col = i % cols;
+
+                    if (!puzzle[row]) {
+                        puzzle[row] = [];
+                    }
+
+                    const value = results[i];
+                    if (value === '') {
+                        puzzle[row][col] = 0; // 空白マスを0で表現
+                        emptyCells.push({ row: row, col: col });
+                    } else {
+                        puzzle[row][col] = parseInt(value, 10);
+                    }
+                }
+
+                // 数独を解く
+                solveSudoku(puzzle);
+
+                // 結果をフォーマット
+                let output = '';
+                emptyCells.forEach(cell => {
+                    let num = puzzle[cell.row][cell.col];
+                    const a = (num - 1) * 114 + 85;
+                    output += `(${a} 2075 ${a} 2075)\n`;
+                });
+
+                // 結果をクリップボードにコピー
+                copyToClipboard(output);
+
+                document.getElementById('output').innerText = output;
+            });
+        }
+
+        function sliceAndRecognize(image, x, y, width, height) {
+            return new Promise((resolve) => {
+                const canvas = document.createElement('canvas');
+                canvas.width = width;
+                canvas.height = height;
+                const ctx = canvas.getContext('2d');
+                ctx.drawImage(image, x, y, width, height, 0, 0, width, height);
+                canvas.toBlob((blob) => {
+                    const fileReader = new FileReader();
+                    fileReader.onload = (e) => {
+                        Tesseract.recognize(e.target.result, 'eng', {
+                            tessedit_char_whitelist: '0123456789'
+                        })
+                            .then(result => {
+                                const text = result.text.trim();
+                                const confidence = result.confidence;
+                                if (text.match(/^\d+$/) && confidence >= 70) {
+                                    resolve(text);
+                                } else {
+                                    resolve('');
+                                }
+                            })
+                            .catch(() => {
+                                resolve('');
+                            });
+                    };
+                    fileReader.readAsDataURL(blob);
+                });
+            });
+        }
+
+        // 数独を解く関数
+        function solveSudoku(board) {
+            const findEmpty = () => {
+                for (let r = 0; r < 9; r++) {
+                    for (let c = 0; c < 9; c++) {
+                        if (board[r][c] === 0) {
+                            return [r, c];
+                        }
+                    }
+                }
+                return null;
+            };
+
+            const isValid = (num, pos) => {
+                const [r, c] = pos;
+
+                // 行をチェック
+                for (let i = 0; i < 9; i++) {
+                    if (board[r][i] === num && i !== c) {
+                        return false;
+                    }
+                }
+
+                // 列をチェック
+                for (let i = 0; i < 9; i++) {
+                    if (board[i][c] === num && i !== r) {
+                        return false;
+                    }
+                }
+
+                // 3x3のブロックをチェック
+                const boxRow = Math.floor(r / 3) * 3;
+                const boxCol = Math.floor(c / 3) * 3;
+
+                for (let i = boxRow; i < boxRow + 3; i++) {
+                    for (let j = boxCol; j < boxCol + 3; j++) {
+                        if (board[i][j] === num && (i !== r || j !== c)) {
+                            return false;
+                        }
+                    }
+                }
+
+                return true;
+            };
+
+            const solve = () => {
+                const curr = findEmpty();
+                if (curr === null) {
+                    return true; // 解が見つかった
+                }
+
+                const [r, c] = curr;
+                for (let num = 1; num <= 9; num++) {
+                    if (isValid(num, [r, c])) {
+                        board[r][c] = num;
+
+                        if (solve()) {
+                            return true;
+                        }
+
+                        board[r][c] = 0;
+                    }
+                }
+
+                return false; // 解が見つからなかった
+            };
+
+            solve();
+        }
+
+        // テキストをクリップボードにコピーする関数
+        function copyToClipboard(text) {
+            navigator.clipboard.writeText(text).then(() => {
+                console.log('コピーしました: ', text);
+            }).catch(err => {
+                console.error('クリップボードにコピーできませんでした: ', err);
+            });
+        }
+    </script>
+</body>
+
+</html>
