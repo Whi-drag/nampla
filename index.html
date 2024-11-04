@@ -74,12 +74,7 @@
                 solveSudoku(puzzle);
 
                 // 結果をフォーマット
-                let output = '';
-                emptyCells.forEach(cell => {
-                    let num = puzzle[cell.row][cell.col];
-                    const a = (num - 1) * 114 + 85;
-                    output += `(${a} 2075 ${a} 2075)\n`;
-                });
+                let output = emptyCells.map(cell => puzzle[cell.row][cell.col]).join('\n');
 
                 // 結果をクリップボードにコピー
                 copyToClipboard(output);
