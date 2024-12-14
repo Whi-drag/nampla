@@ -49,16 +49,41 @@
             }
 
             Promise.all(promises).then(results => {
-                let output = '';
+                let puzzle = [];
+                let emptyCells = [];
+
+                // OCR結果を9x9の配列に格納
+                for (let i = 0; i < results.length; i++) {
+                    let row = Math.floor(i / cols);
+                    let col = i % cols;
+
+                    if (!puzzle[row]) {
+                        puzzle[row] = [];
+                    }
+
+                    const value = results[i];
+                    if (value === '') {
+                        puzzle[row][col] = 0; // 空白マスを0で表現
+                        emptyCells.push({ row: row, col: col });
+                    } else {
+                        puzzle[row][col] = parseInt(value, 10);
+                    }
+                }
+
+                // 数独を解く
+                solveSudoku(puzzle);
 
                 // 出力をフォーマット
-                results.forEach(value => {
-                    if (value === '') {
-                        output += '\n'; // 空白行
-                    } else {
-                        output += value + '\n'; // 数字
+                let output = '';
+                for (let i = 0; i < rows; i++) {
+                    for (let j = 0; j < cols; j++) {
+                        if (results[i * cols + j] === '') {
+                            output += puzzle[i][j] + '\n'; // 解いた値を出力
+                        } else {
+                            output += '\n'; // もともと値が入っていたマスは空行
+                        }
                     }
-                });
+                }
 
                 // 結果をクリップボードにコピー
                 copyToClipboard(output);
@@ -106,6 +131,76 @@
             }).catch(err => {
                 console.error('クリップボードにコピーできませんでした: ', err);
             });
+        }
+
+        // 数独を解く関数
+        function solveSudoku(board) {
+            const findEmpty = () => {
+                for (let r = 0; r < 9; r++) {
+                    for (let c = 0; c < 9; c++) {
+                        if (board[r][c] === 0) {
+                            return [r, c];
+                        }
+                    }
+                }
+                return null;
+            };
+
+            const isValid = (num, pos) => {
+                const [r, c] = pos;
+
+                // 行をチェック
+                for (let i = 0; i < 9; i++) {
+                    if (board[r][i] === num && i !== c) {
+                        return false;
+                    }
+                }
+
+                // 列をチェック
+                for (let i = 0; i < 9; i++) {
+                    if (board[i][c] === num && i !== r) {
+                        return false;
+                    }
+                }
+
+                // 3x3のブロックをチェック
+                const boxRow = Math.floor(r / 3) * 3;
+                const boxCol = Math.floor(c / 3) * 3;
+
+                for (let i = boxRow; i < boxRow + 3; i++) {
+                    for (let j = boxCol; j < boxCol + 3; j++) {
+                        if (board[i][j] === num && (i !== r || j !== c)) {
+                            return false;
+                        }
+                    }
+                }
+
+                return true;
+            };
+
+            const solve = () => {
+                const curr = findEmpty();
+                if (curr === null) {
+                    return true; // 解が見つかった
+                }
+
+                const [r, c] = curr;
+                for (let num = 1; num <= 9; num++) {
+                    if (isValid(num, [r, c])) {
+                        board[r][c] = num;
+
+                        if (solve()) {
+                            return true;
+                        }
+
+                        board[r][c] = 0;
+                    }
+                }
+
+                return false; // 解が見つからなかった
+            };
+
+            solve();
         }
     </script>
 </body>
